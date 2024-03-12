@@ -1,95 +1,173 @@
-import streamlit as st
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 import pandas as pd
+import streamlit as st
+import os
 
-# Define the SessionState class
-class SessionState:
-    def _init_(self, **kwargs):
-        for key, val in kwargs.items():
-            setattr(self, key, val)
+def login():
+    st.title("Login Page")
 
-# Function to add a row and a column to the DataFrame
-@st.cache(allow_output_mutation=True)
-def add_row_and_column(df):
-    # Add a new row and column to the DataFrame
-    new_col_name = f"New Column {df.shape[1] + 1}"
-    df.loc[df.shape[0] + 1] = ""
-    df[new_col_name] = ""
-    return df
+    
+    credentials = {"user": "pass"}
 
-def main():
-    st.title("SEEM for engineers")
+    # Get user inputs
+    username = st.text_input("Username:")
+    password = st.text_input("Password:", type="password")
+
+    if st.button("Login"):
+        if username in credentials and credentials[username] == password:
+            st.success("Login successful!")
+            seem_dashboard()
+        else:
+            st.error("Invalid username or password")
+
+def seem_dashboard():
+
+    df = pd.DataFrame()
+    edited_table = None
+    st.title("SEMM for engineers")
+
+    create_folder("data")
 
     # Use st.session_state to store and retrieve session variables
     session_state = st.session_state
+    if "edited_table" not in session_state:
+        session_state["edited_table"] = edited_table
 
-    # Sidebar navigation
-    page = st.sidebar.radio("Select a page", ["Login", "Matrix Editor"])
+    if "file_uploaded" not in session_state:
+        session_state["file_uploaded"] = False
 
-    if page == "Login":
-        login_page(session_state)
-    elif page == "Matrix Editor":
-        matrix_editor_page(session_state)
+    if "df" not in session_state:
+        session_state["df"] = df
 
-def login_page(session_state):
-    # Login
-    session_state.email = st.text_input("Email:")
-    session_state.password = st.text_input("Password:", type="password")
-    login_button = st.button("Login")
+    edited_df = matrix_editor_page(session_state)
 
-    if login_button:
-        # Add authentication logic here (for simplicity, we'll just display a message)
-        st.success(f"Logged in as {session_state.email}")
-
-        # Change the page
-        session_state.page = "Matrix Editor"
-
-        # Redirect to the matrix editor page using JavaScript
-        redirect_js = """
-        <script>
-            window.location.href = "/?page=Matrix%20Editor";
-        </script>
-        """
-        st.components.v1.html(redirect_js)
+    if not session_state["df"].empty:
+        filename = st.text_input("Enter a filename for the saved data:")
+        if st.button("Save Method Matrix"):
+            if not filename:
+                st.warning("Please enter a filename.")
+            else:
+                df = session_state["df"]
+                df.to_csv(os.path.join("data/", filename + ".csv"), index=False)
+                st.write(f"Saved file {filename} locally")
+                
 
 def matrix_editor_page(session_state):
     st.title("Matrix Editor")
 
-    # Load the existing DataFrame or create a new one
-    df = load_or_create_matrix(session_state)
+    curr_dim = 0
+    uploaded_file = st.file_uploader("Choose an Excel file", type='csv')
+    upload = st.button("Render")
+    if uploaded_file and upload and not session_state["file_uploaded"]:
+        df = pd.read_csv(uploaded_file)
+        session_state["df"] = df
+        st.write('Data import successful!')
+        session_state["file_uploaded"] = True
 
-    # Display the existing DataFrame
-    edited_table = st.data_editor(df)
-    value = edited_table["Column1"].iloc[0]
-    st.markdown(f"Your favorite command is **{value}** 🎈")
+    new_entry = st.text_input("Enter new entry's name")
+    add_entry = st.button('Add Entry')
 
-    # Display text area for manual editing
+    if "add_entry" not in session_state:
+        session_state.add_entry = False
+    if add_entry or session_state["edited_table"] or session_state["file_uploaded"]:
+        session_state.add_entry = True
+        update_curr_grid_dimension(add_entry, curr_dim, session_state)
+
+        df = session_state["df"]
+
+        df = create_df(add_entry, df, new_entry)
+
+        grid_table = render_grid(df)
+
+        update_edited_values(df, grid_table)
+
+        edited_df = grid_table['data']
+        session_state["edited_table"] = grid_table
+        session_state["df"] = df
+        session_state["file_uploaded"] = False
+
+        return grid_table
 
 
-def load_or_create_matrix(session_state):
-    # Load the existing DataFrame or create a new one
-    if hasattr(session_state, "matrix_df"):
-        return session_state.matrix_df
+def update_curr_grid_dimension(add_entry, curr_dim, session_state):
+    if not session_state["edited_table"] is None:
+        if add_entry:
+            curr_dim += len(session_state["edited_table"]["data"]) + 1
+        else:
+            curr_dim += len(session_state["edited_table"]["data"])
+
     else:
-        return create_matrix()
+        curr_dim += 1
 
-def create_matrix():
-    # Create a DataFrame with 15 rows and 15 columns
-    data = {f"Column{i}": [""] * 15 for i in range(1, 16)}
-    df = pd.DataFrame(data)
+
+def create_df(add_entry, df, new_entry):
+    if df.empty:
+        df = pd.DataFrame(data=[" "], columns=[new_entry] if new_entry is not None else ["col_0"])
+        df["Entry"] = new_entry
+        df["Method"] = ""
+        df["Method-Description"] = ""
+        df = df[["Entry"] + ["Method"] + ["Method-Description"] + [col for col in df.columns if col not in ["Entry", "Method", "Method-Description"]]]
+    if new_entry not in df.columns and add_entry:
+        df.loc[len(df)] = pd.Series([""], index=[new_entry])
+        df.at[len(df) - 1, "Entry"] = new_entry
+
+        # Add an empty column
+        df[new_entry] = pd.Series()
     return df
 
-def parse_edited_text(text):
-    # Parse the edited text and convert it to a DataFrame
-    lines = text.split('\n')
-    parsed_data = [line.split() for line in lines]
-    updated_df = pd.DataFrame(parsed_data, columns=[f"Column{i}" for i in range(1, 16)])
-    return updated_df
 
-def save_matrix(session_state, df):
-    # Save the updated DataFrame to session_state
-    session_state.matrix_df = df
+def update_edited_values(df, grid_table):
+    if grid_table.selected_rows:
+        row_to_update = grid_table.selected_rows[0]["_selectedRowNodeInfo"]["nodeRowIndex"]
+        del grid_table.selected_rows[0]["_selectedRowNodeInfo"]
+        df.iloc[row_to_update] = grid_table.selected_rows[0]
 
-# Run the Streamlit app
+        df.columns = ["Entry", "Method", "Method-Description"] + list((df["Entry"].unique()))
+
+        # Drop columns not in the list
+        columns_to_drop = [col for col in df.columns if col not in ["Entry", "Method", "Method-Description"] + list((df["Entry"].unique()))]
+        df.drop(columns=columns_to_drop, inplace=True)
+        grid_table.data = df
+        new_entry = None
+
+        st.experimental_rerun()
+
+
+def render_grid(df):
+    gd = GridOptionsBuilder.from_dataframe(df)
+    gd.configure_pagination(enabled=True)
+    gd.configure_default_column(editable=True, groupable=True)
+    gd.configure_selection(selection_mode="multiple")
+    gridoptions = gd.build()
+    gridoptions["rowDragMultiRow"] = True
+    gridoptions["rowDragManaged"] = True
+    gridoptions["rowDragEntireRow"] = True
+    grid_table = AgGrid(
+        df,
+        gridOptions=gridoptions,
+        data_return_mode=DataReturnMode.AS_INPUT,
+        update_mode=GridUpdateMode.VALUE_CHANGED,
+        # theme="material"
+    )
+    return grid_table
+
+
+def create_folder(folder_path):
+    # Check if the folder exists
+    if not os.path.exists(folder_path):
+        # If it doesn't exist, create it
+        os.makedirs(folder_path)
+        print(f"Folder '{folder_path}' created successfully.")
+
+def main():
+    page = st.sidebar.radio("Navigation", ["Login", "SEEM Dashboard"], key="main_navigation")
+
+    if page == "Login":
+        login()
+    elif page == "SEEM Dashboard":
+        seem_dashboard()  # Call a new function for the SEEM Dashboard
+
+
+
 if __name__ == "__main__":
     main()
-
