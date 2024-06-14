@@ -9,12 +9,9 @@ from io import BytesIO
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = r"C:\Users\hari5\downloads\nth-silo-410612-026a4a85986e.json"
 def login():
     st.title("Login Page")
-
-    
     credentials = {"user": "pass"}
     username = st.text_input("Username:")
     password = st.text_input("Password:", type="password")
-
     if st.button("Login"):
         if username in credentials and credentials[username] == password:
             st.success("Login successful!")
@@ -23,22 +20,17 @@ def login():
             st.error("Invalid username or password")
 
 def seem_dashboard():
-
     df = pd.DataFrame()
     edited_table = None
     st.title("SEMM for engineers")
-
     create_folder("data")
     session_state = st.session_state
     if "edited_table" not in session_state:
-        session_state["edited_table"] = edited_table
-
+        session_state["edited_table"] = edited_tabl
     if "file_uploaded" not in session_state:
         session_state["file_uploaded"] = False
-
     if "df" not in session_state:
         session_state["df"] = df
-
     edited_df = matrix_editor_page(session_state)
 
     if not session_state["df"].empty:
@@ -50,7 +42,6 @@ def seem_dashboard():
                 df = session_state["df"]
                 df.to_csv(os.path.join("data/", filename + ".csv"), index=False)
                 st.write(f"Saved file {filename} locally")
-
         if st.button("Save to Google Cloud"):
             save_to_google_cloud(session_state["df"], filename)
 
@@ -64,23 +55,18 @@ def seem_dashboard():
                     st.write('Data imported successfully!')
 
 def save_to_google_cloud(df, filename):
-
     project_id = 'nth-silo-410612'
     bucket_name = 'streamlit_semm-bucket'
-
     client = storage.Client(project=project_id)
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(filename)
-
     csv_data = df.to_csv(index=False)
     blob.upload_from_string(csv_data)
-
     st.write(f'Data saved to Google Cloud Storage: {filename}')
 
 def import_from_google_cloud(session_state):
     project_id = 'nth-silo-410612'
     bucket_name = 'streamlit_semm-bucket'
-
     client = storage.Client(project=project_id)
     bucket = client.bucket(bucket_name)
 
@@ -88,7 +74,6 @@ def import_from_google_cloud(session_state):
         blob = bucket.blob(session_state.selected_filename)
         file_content = blob.download_as_string()
         imported_df = pd.read_csv(BytesIO(file_content))
-
         st.write('Data import successful!')
         session_state["df"] = imported_df  
         return imported_df
@@ -99,17 +84,13 @@ def import_from_google_cloud(session_state):
 def get_files_from_google_cloud():
     project_id = 'nth-silo-410612'
     bucket_name = 'streamlit_semm-bucket'
-
     client = storage.Client(project=project_id)
     bucket = client.bucket(bucket_name)
-
     blobs = list(bucket.list_blobs())
-
     return [blob.name for blob in blobs]
 
 def matrix_editor_page(session_state):
     st.title("Matrix Editor")
-
     curr_dim = 0
     uploaded_file = st.file_uploader("Choose an Excel file", type='csv')
     upload = st.button("Render")
@@ -118,29 +99,21 @@ def matrix_editor_page(session_state):
         session_state["df"] = df
         st.write('Data import successful!')
         session_state["file_uploaded"] = True
-
     new_entry = st.text_input("Enter new entry's name")
     add_entry = st.button('Add Entry')
-
     if "add_entry" not in session_state:
         session_state.add_entry = False
     if add_entry or session_state["edited_table"] or session_state["file_uploaded"]:
         session_state.add_entry = True
         update_curr_grid_dimension(add_entry, curr_dim, session_state)
-
         df = session_state["df"]
-
         df = create_df(add_entry, df, new_entry)
-
         grid_table = render_grid(df)
-
         update_edited_values(df, grid_table)
-
         edited_df = grid_table['data']
         session_state["edited_table"] = grid_table
         session_state["df"] = df
         session_state["file_uploaded"] = False
-
         return grid_table
 
 
@@ -150,7 +123,6 @@ def update_curr_grid_dimension(add_entry, curr_dim, session_state):
             curr_dim += len(session_state["edited_table"]["data"]) + 1
         else:
             curr_dim += len(session_state["edited_table"]["data"])
-
     else:
         curr_dim += 1
 
@@ -168,20 +140,16 @@ def create_df(add_entry, df, new_entry):
         df[new_entry] = pd.Series()
     return df
 
-
-
 def update_edited_values(df, grid_table):
     if grid_table.selected_rows:
         row_to_update = grid_table.selected_rows[0]["_selectedRowNodeInfo"]["nodeRowIndex"]
         del grid_table.selected_rows[0]["_selectedRowNodeInfo"]
         df.iloc[row_to_update] = grid_table.selected_rows[0]
-
         df.columns = ["Entry", "Method", "Method-Description"] + list((df["Entry"].unique()))
         columns_to_drop = [col for col in df.columns if col not in ["Entry", "Method", "Method-Description"] + list((df["Entry"].unique()))]
         df.drop(columns=columns_to_drop, inplace=True)
         grid_table.data = df
         new_entry = None
-
         st.experimental_rerun()
 
 
@@ -211,7 +179,6 @@ def create_folder(folder_path):
 
 def main():
     page = st.sidebar.radio("Navigation", ["Login", "SEEM Dashboard"], key="main_navigation")
-
     if page == "Login":
         login()
     elif page == "SEEM Dashboard":
