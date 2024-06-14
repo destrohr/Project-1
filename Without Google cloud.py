@@ -17,7 +17,6 @@ def login():
             st.error("Invalid username or password")
 
 def seem_dashboard():
-
     df = pd.DataFrame()
     edited_table = None
     st.title("SEMM for engineers")
